@@ -103,7 +103,8 @@ function MiniCourseCard({ course, overlay }: { course: Course; overlay?: boolean
 }
 
 
-// Unassigned pool — courses added but not yet in any column
+// Unassigned pool — courses added but not put in Need-to-Have. These are
+// remembered and can be added to the schedule later.
 function UnassignedPool({
   courses,
   activeId,
@@ -115,6 +116,9 @@ function UnassignedPool({
   return (
     <div className="unassigned-section">
       <h3 className="unassigned-title">Added Courses — drag to categorize</h3>
+      <p className="unassigned-subtitle">
+        The courses you leave here are remembered and you'll be able to add them at a later stage.
+      </p>
       <SortableContext items={courses.map((c) => c.id)} strategy={verticalListSortingStrategy}>
         <div
           ref={setNodeRef}
@@ -134,6 +138,8 @@ function UnassignedPool({
   );
 }
 
+
+type Container = 'need' | 'nice' | 'optional' | 'unassigned';
 
 export function PrioritizeScreen() {
   const {
@@ -155,15 +161,25 @@ export function PrioritizeScreen() {
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
 
-  // Courses in the unassigned pool: added but not in need/nice/optional
-  const assignedIds = new Set([
-    ...needToHave.map((c) => c.id),
-    ...niceToHave.map((c) => c.id),
-    ...optional.map((c) => c.id),
-  ]);
-  const unassigned = addedCourses.filter((c) => !assignedIds.has(c.id));
+  // Courses in the unassigned pool: added but not yet placed in any tier.
+  // A course stays in whichever tier it was dropped into until the user
+  // drags it somewhere else — it is never silently reassigned.
+  const tieredIds = new Set([...needToHave, ...niceToHave, ...optional].map((c) => c.id));
+  const unassigned = addedCourses.filter((c) => !tieredIds.has(c.id));
 
-  type Container = 'need' | 'nice' | 'optional' | 'unassigned';
+  const listByContainer: Record<Container, Course[]> = {
+    need: needToHave,
+    nice: niceToHave,
+    optional,
+    unassigned,
+  };
+
+  const setterByContainer: Record<Container, (courses: Course[]) => void> = {
+    need: setNeedToHave,
+    nice: setNiceToHave,
+    optional: setOptional,
+    unassigned: () => {}, // unassigned is derived, not stored directly
+  };
 
   const findContainer = (id: string): Container | null => {
     if (needToHave.find((c) => c.id === id)) return 'need';
@@ -173,19 +189,7 @@ export function PrioritizeScreen() {
     return null;
   };
 
-  const getList = (container: string): Course[] => {
-    if (container === 'need') return needToHave;
-    if (container === 'nice') return niceToHave;
-    if (container === 'optional') return optional;
-    return unassigned;
-  };
-
-  const setList = (container: string, courses: Course[]) => {
-    if (container === 'need') setNeedToHave(courses);
-    else if (container === 'nice') setNiceToHave(courses);
-    else if (container === 'optional') setOptional(courses);
-    // unassigned is derived
-  };
+  const getList = (container: Container): Course[] => listByContainer[container];
 
   const handleDragStart = ({ active }: DragStartEvent) => {
     setActiveId(String(active.id));
@@ -199,7 +203,9 @@ export function PrioritizeScreen() {
     if (!activeContainer) return;
 
     // Block moving obligatory courses out of need-to-have
-    const draggedCourse = [...needToHave, ...niceToHave, ...optional, ...unassigned].find((c) => c.id === String(active.id));
+    const draggedCourse = [...needToHave, ...niceToHave, ...optional, ...unassigned].find(
+      (c) => c.id === String(active.id)
+    );
     let overContainer: Container;
     if (over.id === 'need' || over.id === 'nice' || over.id === 'optional' || over.id === 'unassigned') {
       overContainer = over.id as Container;
@@ -209,7 +215,7 @@ export function PrioritizeScreen() {
 
     if (draggedCourse?.isObligatory && overContainer !== 'need') {
       setObligatoryWarning(true);
-      setTimeout(() => setObligatoryWarning(false), 3000);
+      setTimeout(() => setObligatoryWarning(false), 5000);
       return;
     }
 
@@ -220,10 +226,8 @@ export function PrioritizeScreen() {
 
     if (activeContainer === overContainer) {
       // Reorder within same list
-      if (activeContainer !== 'unassigned') {
-        const newList = arrayMove(activeList, activeIdx, overIdx >= 0 ? overIdx : activeList.length - 1);
-        setList(activeContainer, newList);
-      }
+      const newList = arrayMove(activeList, activeIdx, overIdx >= 0 ? overIdx : activeList.length - 1);
+      setterByContainer[activeContainer](newList);
     } else {
       // Move between lists
       const item = activeList[activeIdx];
@@ -233,15 +237,11 @@ export function PrioritizeScreen() {
       const insertAt = overIdx >= 0 ? overIdx : overList.length;
       const newOverList = [...overList.slice(0, insertAt), item, ...overList.slice(insertAt)];
 
-      // Update source
-      if (activeContainer !== 'unassigned') {
-        setList(activeContainer, newActiveList);
-      }
-
-      // Update destination
-      if (overContainer !== 'unassigned') {
-        setList(overContainer, newOverList);
-      }
+      // Update source, then destination — the course only ever lives in one
+      // tier's state array at a time, so the schedule always recomputes off
+      // a single source of truth for where each course currently sits.
+      setterByContainer[activeContainer](newActiveList);
+      setterByContainer[overContainer](newOverList);
     }
   };
 
@@ -255,10 +255,10 @@ export function PrioritizeScreen() {
         <div>
           <h1 className="screen-title">Prioritize</h1>
           <p className="screen-subtitle">
-            Drag courses into your tiers to set priorities.
+            Drag courses into Need-to-Have, Nice-to-Have, or Optional to structure your priorities.
           </p>
         </div>
-        {(needToHave.length > 0 || niceToHave.length > 0) && (
+        {needToHave.length > 0 && (
           <button className="cta-btn" onClick={() => setScreen('schedule')}>
             Build Schedule →
           </button>
@@ -282,14 +282,13 @@ export function PrioritizeScreen() {
             {/* Unassigned Pool */}
             <UnassignedPool courses={unassigned} activeId={activeId} />
 
-            {/* Three-column tiers */}
             <div className="tier-columns">
               <DroppableColumn
                 id="need"
                 title="Need-to-Have"
                 courses={needToHave}
                 color="need"
-                emptyLabel="Drop courses here — highest priority"
+                emptyLabel="Drop courses here to add them to your schedule"
                 activeId={activeId}
               />
               <DroppableColumn
@@ -297,7 +296,7 @@ export function PrioritizeScreen() {
                 title="Nice-to-Have"
                 courses={niceToHave}
                 color="nice"
-                emptyLabel="Drop courses here — lower priority"
+                emptyLabel="Drop courses here if they'd be great to fit in"
                 activeId={activeId}
               />
               <DroppableColumn
@@ -305,7 +304,7 @@ export function PrioritizeScreen() {
                 title="Optional"
                 courses={optional}
                 color="optional"
-                emptyLabel="Drop courses here — won't be scheduled"
+                emptyLabel="Drop courses here to consider only if there's space"
                 activeId={activeId}
               />
             </div>

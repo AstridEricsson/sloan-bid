@@ -22,8 +22,9 @@ export function LoginScreen() {
 
         <div className="login-divider" />
 
-        <h1 className="login-heading">Welcome to SloanBid</h1>
-        <p className="login-tagline">Augment your capacity to choose.</p>
+        <div className="login-heading-wrap">
+          <h1 className="login-heading">Augment your capacity to choose.</h1>
+        </div>
 
         <div className="login-student-preview">
           <div className="student-avatar">{student.name.charAt(0)}</div>

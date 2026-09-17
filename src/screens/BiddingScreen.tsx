@@ -22,7 +22,6 @@ export function BiddingScreen() {
     optional,
     sectionOverrides,
     setScreen,
-    hiddenCourseIds,
   } = useApp();
 
   // Replicate blockedNiceIds logic (same as BrowseScreen/ScheduleScreen)
@@ -30,7 +29,7 @@ export function BiddingScreen() {
     day: ob.day, start: ob.startHour, end: ob.endHour, term: null,
   }));
 
-  const visibleNeed = needToHave.filter((c) => !hiddenCourseIds.has(c.id));
+  const visibleNeed = needToHave;
 
   const needOnlyBlocks = useMemo(
     () => computeSchedule({ needToHave: visibleNeed, niceToHave: [], optional: [], sectionOverrides }),
@@ -59,7 +58,7 @@ export function BiddingScreen() {
     return blocked;
   }, [niceToHave, needBaseSlots]);
 
-  const visibleNice = niceToHave.filter((c) => !hiddenCourseIds.has(c.id) && !blockedNiceIds.has(c.id));
+  const visibleNice = niceToHave.filter((c) => !blockedNiceIds.has(c.id));
 
   const placedBlocks = useMemo(
     () => computeSchedule({ needToHave: visibleNeed, niceToHave: visibleNice, optional, sectionOverrides }),
@@ -197,7 +196,9 @@ export function BiddingScreen() {
               <div className="bidding-course-header">
                 <span className="bidding-course-number">{course.number}</span>
                 <span className={`term-badge term-${course.term.toLowerCase()}`}>{course.term} · {course.units}u</span>
-                <span className={`bidding-tier-badge tier-badge-${tier}`}>{tierLabel(tier)}</span>
+                <span className={`bidding-tier-badge tier-badge-${tier}`}>
+                  {course.isObligatory ? 'Obligatory' : tierLabel(tier)}
+                </span>
               </div>
               <h3 className="bidding-course-title">{course.title}</h3>
               <p className="bidding-course-professor">{course.professor}</p>

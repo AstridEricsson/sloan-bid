@@ -22,7 +22,9 @@ function AppInner() {
       <main className="main-content">
         {screen === 'discover' && <DiscoverScreen />}
         {screen === 'prioritize' && <PrioritizeScreen />}
-        {screen === 'schedule' && <ScheduleScreen />}
+        {screen === 'schedule' && <ScheduleScreen stage="need" />}
+        {screen === 'schedule-nice' && <ScheduleScreen stage="nice" />}
+        {screen === 'schedule-optional' && <ScheduleScreen stage="optional" />}
         {screen === 'browse' && <BrowseScreen />}
         {screen === 'bidding' && <BiddingScreen />}
       </main>

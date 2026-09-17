@@ -24,7 +24,15 @@ export interface Course {
   isObligatory?: boolean;
 }
 
-export type Screen = 'login' | 'discover' | 'prioritize' | 'schedule' | 'browse' | 'bidding';
+export type Screen =
+  | 'login'
+  | 'discover'
+  | 'prioritize'
+  | 'schedule'
+  | 'schedule-nice'
+  | 'schedule-optional'
+  | 'browse'
+  | 'bidding';
 
 export interface ChatAction {
   label: string;

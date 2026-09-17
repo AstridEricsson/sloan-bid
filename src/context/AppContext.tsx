@@ -15,6 +15,8 @@ interface AppState {
   setNeedToHave: (courses: Course[]) => void;
   setNiceToHave: (courses: Course[]) => void;
   setOptional: (courses: Course[]) => void;
+  sacrificedFrom: Record<string, 'need' | 'nice' | 'optional'>;
+  setSacrificedFrom: (map: Record<string, 'need' | 'nice' | 'optional'>) => void;
   isChatOpen: boolean;
   toggleChat: () => void;
   chatMessages: ChatMessage[];
@@ -23,8 +25,6 @@ interface AppState {
   sectionOverrides: Record<string, string>;
   setSectionOverride: (courseId: string, sectionId: string) => void;
   removeSectionOverride: (courseId: string) => void;
-  hiddenCourseIds: Set<string>;
-  setHiddenCourseIds: (ids: Set<string>) => void;
   browseAddedIds: Set<string>;
   addBrowseAddedId: (id: string) => void;
   removeBrowseAddedId: (id: string) => void;
@@ -48,10 +48,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [needToHave, setNeedToHave] = useState<Course[]>([OBLIGATORY_COURSE]);
   const [niceToHave, setNiceToHave] = useState<Course[]>([]);
   const [optional, setOptional] = useState<Course[]>([]);
+  const [sacrificedFrom, setSacrificedFrom] = useState<Record<string, 'need' | 'nice' | 'optional'>>({});
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(INITIAL_CHAT);
   const [sectionOverrides, setSectionOverrides] = useState<Record<string, string>>({});
-  const [hiddenCourseIds, setHiddenCourseIds] = useState<Set<string>>(new Set());
   const [browseAddedIds, setBrowseAddedIds] = useState<Set<string>>(new Set());
 
   // Refs for stale-closure prevention in setTimeout
@@ -167,6 +167,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setNeedToHave,
         setNiceToHave,
         setOptional,
+        sacrificedFrom,
+        setSacrificedFrom,
         isChatOpen,
         toggleChat,
         chatMessages,
@@ -175,8 +177,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         sectionOverrides,
         setSectionOverride,
         removeSectionOverride,
-        hiddenCourseIds,
-        setHiddenCourseIds,
         browseAddedIds,
         addBrowseAddedId,
         removeBrowseAddedId,

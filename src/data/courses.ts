@@ -1,5 +1,6 @@
 import type { Course } from '../types';
 
+// Sample/placeholder ratings & review quotes for demo purposes — not real course evaluation data.
 export const ALL_COURSES: Course[] = [
   {
     id: 'c1',
@@ -152,10 +153,10 @@ export const ALL_COURSES: Course[] = [
       {
         id: 's6b',
         days: 'Tue/Thu',
-        time: '2–3:30pm',
+        time: '2:30–4pm',
         dayKeys: ['Tue', 'Thu'],
-        startHour: 14,
-        endHour: 15.5,
+        startHour: 14.5,
+        endHour: 16,
       },
     ],
     isCompleted: true,
@@ -195,10 +196,10 @@ export const ALL_COURSES: Course[] = [
       {
         id: 's8a',
         days: 'Mon/Wed',
-        time: '2–3:30pm',
+        time: '2:30–4pm',
         dayKeys: ['Mon', 'Wed'],
-        startHour: 14,
-        endHour: 15.5,
+        startHour: 14.5,
+        endHour: 16,
       },
     ],
   },

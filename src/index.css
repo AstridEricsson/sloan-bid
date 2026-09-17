@@ -339,16 +339,24 @@ input, textarea { font-family: inherit; }
   width: 100%;
   height: 1px;
   background: var(--gray-100);
-  margin-bottom: 32px;
+  margin-bottom: 8px;
+}
+
+.login-heading-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+  margin-bottom: 8px;
 }
 
 .login-heading {
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 700;
   color: var(--navy);
   text-align: center;
   letter-spacing: -0.5px;
-  margin-bottom: 8px;
+  line-height: 1.35;
 }
 
 .login-tagline {
@@ -472,6 +480,19 @@ input, textarea { font-family: inherit; }
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.header-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.added-pill-note {
+  margin: -4px 0 0;
+  font-size: 11px;
+  color: var(--gray-400);
 }
 
 /* Filter Bar */
@@ -722,6 +743,19 @@ input, textarea { font-family: inherit; }
   line-height: 1.5;
 }
 
+.course-expand-hint {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--navy);
+  opacity: 0.6;
+}
+.course-card:hover .course-expand-hint {
+  opacity: 1;
+  text-decoration: underline;
+}
+
 .course-sections-preview {
   display: flex;
   flex-wrap: wrap;
@@ -878,7 +912,7 @@ input, textarea { font-family: inherit; }
   color: var(--gray-500);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 12px;
+  margin-bottom: 4px;
 }
 
 .unassigned-pool {
@@ -912,8 +946,14 @@ input, textarea { font-family: inherit; }
 /* Tier columns */
 .tier-columns {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
+}
+
+.unassigned-subtitle {
+  font-size: 12px;
+  color: var(--gray-400);
+  margin: 0 0 12px;
 }
 
 .droppable-column {
@@ -1688,14 +1728,25 @@ input, textarea { font-family: inherit; }
 
 .bid-row-info {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 6px;
+  gap: 4px 6px;
   flex: 1;
   min-width: 0;
 }
 
 .bid-row-number { font-size: 11px; font-weight: 700; color: var(--navy); opacity: 0.7; flex-shrink: 0; }
 .bid-row-title { font-size: 12px; font-weight: 600; color: var(--navy); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bid-row-info .term-badge { flex-shrink: 0; }
+
+.obligatory-badge-sm {
+  flex-basis: 100%;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--gray-400);
+}
 
 .bid-row-input-wrap {
   display: flex;
@@ -2053,6 +2104,56 @@ input, textarea { font-family: inherit; }
 }
 .sidebar-hint p:last-child {
   margin-bottom: 0;
+}
+
+.conflict-suggestion-btn {
+  display: block;
+  width: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  color: #b91c1c;
+  background: var(--white);
+  border: 1px solid #fca5a5;
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.conflict-suggestion-btn:hover {
+  background: #fef2f2;
+}
+
+.sacrifice-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--gray-100);
+  margin-bottom: 8px;
+}
+.sacrifice-row:last-child { margin-bottom: 0; }
+
+.sacrifice-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--gray-500);
+  line-height: 1.5;
+}
+
+.sacrifice-action-btn {
+  display: block;
+  width: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--navy);
+  background: var(--ice-light);
+  border: 1px solid var(--ice-dim);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.sacrifice-action-btn:hover {
+  background: var(--ice);
 }
 
 /* ── Chat Action Buttons ── */

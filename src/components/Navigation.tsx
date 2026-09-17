@@ -4,7 +4,9 @@ import type { Screen } from '../types';
 const NAV_ITEMS: { screen: Screen; label: string; icon: string }[] = [
   { screen: 'discover', label: 'Discover', icon: '◎' },
   { screen: 'prioritize', label: 'Prioritize', icon: '⊟' },
-  { screen: 'schedule', label: 'Schedule', icon: '▦' },
+  { screen: 'schedule', label: 'Schedule: Need-to-Have', icon: '▦' },
+  { screen: 'schedule-nice', label: 'Schedule: Nice-to-Have', icon: '▦' },
+  { screen: 'schedule-optional', label: 'Schedule: Optional', icon: '▦' },
   { screen: 'browse', label: 'Browse Compatible', icon: '⊕' },
   { screen: 'bidding', label: 'Bidding', icon: '⊘' },
 ];

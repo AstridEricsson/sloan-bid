@@ -59,7 +59,6 @@ export function BrowseScreen() {
     addCourse,
     removeCourse,
     setScreen,
-    hiddenCourseIds,
     browseAddedIds,
     addBrowseAddedId,
     clearBrowseAddedIds,
@@ -77,8 +76,8 @@ export function BrowseScreen() {
     day: ob.day, start: ob.startHour, end: ob.endHour, term: null,
   }));
 
-  // Step 1: Visible needs (only manual hides)
-  const visibleNeed = needToHave.filter((c) => !hiddenCourseIds.has(c.id));
+  // Step 1: Visible needs
+  const visibleNeed = needToHave;
 
   // Step 2: Need-only schedule to get base slots
   const needOnlyBlocks = useMemo(
@@ -109,12 +108,8 @@ export function BrowseScreen() {
     return blocked;
   }, [niceToHave, needBaseSlots]);
 
-  // Step 4: Visible nices = not manually hidden AND not blocked
-  const visibleNice = niceToHave.filter((c) => {
-    if (hiddenCourseIds.has(c.id)) return false;
-    if (blockedNiceIds.has(c.id)) return false;
-    return true;
-  });
+  // Step 4: Visible nices = not blocked
+  const visibleNice = niceToHave.filter((c) => !blockedNiceIds.has(c.id));
 
   // Step 5: Full schedule with all visible courses
   const placedBlocks = useMemo(
@@ -228,7 +223,7 @@ export function BrowseScreen() {
       {/* Static Calendar */}
       <div className="browse-calendar">
         <div className="browse-calendar-header">
-          <button className="browse-back-link" onClick={() => setScreen('schedule')}>
+          <button className="browse-back-link" onClick={() => setScreen('schedule-optional')}>
             ← Back to Schedule
           </button>
           <div className="units-counter">
@@ -474,6 +469,10 @@ export function BrowseScreen() {
               <StarRating rating={course.rating} size="sm" />
 
               <p className="course-quote">"{course.reviewQuote}"</p>
+
+              <span className="course-expand-hint">
+                {expanded === course.id ? 'Show less ▲' : 'Read more ▼'}
+              </span>
 
               <div className="course-sections-preview">
                 {course.sections.map((s) => {

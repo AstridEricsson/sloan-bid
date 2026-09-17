@@ -7,7 +7,7 @@ import { StarRating } from '../components/StarRating';
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
 export function DiscoverScreen() {
-  const { addedCourses, addCourse, removeCourse } = useApp();
+  const { addedCourses, addCourse, removeCourse, setScreen } = useApp();
   const [search, setSearch] = useState('');
   const [filterDay, setFilterDay] = useState<string>('');
   const [filterMinRating, setFilterMinRating] = useState<number>(0);
@@ -47,8 +47,14 @@ export function DiscoverScreen() {
           <p className="screen-subtitle">Browse and add courses to your consideration list.</p>
         </div>
         {addedCourses.length > 0 && (
-          <div className="added-pill">
-            <span>{addedCourses.length} course{addedCourses.length !== 1 ? 's' : ''} added</span>
+          <div className="header-actions">
+            <div className="added-pill">
+              <span>{addedCourses.length} course{addedCourses.length !== 1 ? 's' : ''} added</span>
+            </div>
+            <p className="added-pill-note">including your program's obligatory course</p>
+            <button className="cta-btn" onClick={() => setScreen('prioritize')}>
+              Prioritize courses →
+            </button>
           </div>
         )}
       </div>
@@ -140,6 +146,12 @@ export function DiscoverScreen() {
             <StarRating rating={course.rating} size="sm" />
 
             <p className="course-quote">"{course.reviewQuote}"</p>
+
+            {!course.isCompleted && (
+              <span className="course-expand-hint">
+                {expanded === course.id ? 'Show less ▲' : 'Read more ▼'}
+              </span>
+            )}
 
             <div className="course-sections-preview">
               {course.sections.map((s) => (
