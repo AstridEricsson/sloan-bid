@@ -26,6 +26,8 @@ export function DiscoverScreen() {
 
   const isAdded = (c: Course) => addedCourses.some((x) => x.id === c.id);
 
+  const totalUnits = addedCourses.reduce((sum, c) => sum + c.units, 0);
+
   const handleCardClick = (id: string) => {
     setExpanded(expanded === id ? null : id);
   };
@@ -49,7 +51,7 @@ export function DiscoverScreen() {
         {addedCourses.length > 0 && (
           <div className="header-actions">
             <div className="added-pill">
-              <span>{addedCourses.length} course{addedCourses.length !== 1 ? 's' : ''} added</span>
+              <span>{totalUnits} unit{totalUnits !== 1 ? 's' : ''} added</span>
             </div>
             <p className="added-pill-note">including your program's obligatory course</p>
             <button className="cta-btn" onClick={() => setScreen('prioritize')}>

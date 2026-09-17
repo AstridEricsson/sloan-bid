@@ -4,9 +4,9 @@ import type { Screen } from '../types';
 const NAV_ITEMS: { screen: Screen; label: string; icon: string }[] = [
   { screen: 'discover', label: 'Discover', icon: '◎' },
   { screen: 'prioritize', label: 'Prioritize', icon: '⊟' },
-  { screen: 'schedule', label: 'Schedule: Need-to-Have', icon: '▦' },
-  { screen: 'schedule-nice', label: 'Schedule: Nice-to-Have', icon: '▦' },
-  { screen: 'schedule-optional', label: 'Schedule: Optional', icon: '▦' },
+  { screen: 'schedule', label: 'Need-to-Have', icon: '▦' },
+  { screen: 'schedule-nice', label: 'Nice-to-Have', icon: '▦' },
+  { screen: 'schedule-optional', label: 'Optional', icon: '▦' },
   { screen: 'browse', label: 'Browse Compatible', icon: '⊕' },
   { screen: 'bidding', label: 'Bidding', icon: '⊘' },
 ];
@@ -23,17 +23,23 @@ export function Navigation() {
 
       <div className="nav-items">
         {NAV_ITEMS.map((item) => (
-          <button
-            key={item.screen}
-            className={`nav-item ${screen === item.screen ? 'active' : ''}`}
-            onClick={() => setScreen(item.screen)}
-          >
-            <span className="nav-icon">{item.icon}</span>
-            <span className="nav-label">{item.label}</span>
-            {item.screen === 'discover' && addedCourses.length > 0 && (
-              <span className="nav-badge">{addedCourses.length}</span>
-            )}
-          </button>
+          <div key={item.screen}>
+            {item.screen === 'schedule' && <div className="nav-group-label">Schedule</div>}
+            <button
+              className={`nav-item ${screen === item.screen ? 'active' : ''} ${
+                item.screen === 'schedule' || item.screen === 'schedule-nice' || item.screen === 'schedule-optional'
+                  ? 'nav-item-grouped'
+                  : ''
+              }`}
+              onClick={() => setScreen(item.screen)}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-label">{item.label}</span>
+              {item.screen === 'discover' && addedCourses.length > 0 && (
+                <span className="nav-badge">{addedCourses.length}</span>
+              )}
+            </button>
+          </div>
         ))}
       </div>
 

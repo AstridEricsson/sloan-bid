@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import type { Course, Term } from '../types';
 import { STUDENT } from '../data/courses';
 import { computeSchedule, getAssignedSection } from '../utils/scheduleEngine';
+import { SectionToggle } from '../components/SectionToggle';
 
 function combinations<T>(items: T[], size: number): T[][] {
   if (size === 0) return [[]];
@@ -42,19 +43,15 @@ export type ScheduleStage = 'need' | 'nice' | 'optional';
 
 export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
   const {
-    addedCourses,
     needToHave,
     niceToHave,
     optional,
-    setNeedToHave,
-    setNiceToHave,
-    setOptional,
     setScreen,
     sectionOverrides,
     setSectionOverride,
     removeSectionOverride,
-    sacrificedFrom,
-    setSacrificedFrom,
+    deselectedIds,
+    setDeselectedIds,
   } = useApp();
   const [showConflictToast, setShowConflictToast] = useState(false);
 
@@ -63,8 +60,6 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
   const overlapIdsRef = useRef<Set<string>>(new Set());
   const niceOverlapIdsRef = useRef<Set<string>>(new Set());
   const optOverlapIdsRef = useRef<Set<string>>(new Set());
-
-  type Tier = 'need' | 'nice' | 'optional';
 
   // Shared conflict analysis helpers
   type Slot = { day: string; start: number; end: number; term: Term | null };
@@ -80,8 +75,9 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
     day: ob.day, start: ob.startHour, end: ob.endHour, term: null,
   }));
 
-  // ── Step 1: Visible needs ──
-  const visibleNeed = needToHave;
+  // ── Step 1: Visible needs — manually deselected courses are excluded from
+  // the schedule but stay listed (unticked) in the sidebar ──
+  const visibleNeed = needToHave.filter((c) => !deselectedIds.has(c.id));
 
   // ── Step 2: Compute need-only schedule to get base slots (independent of nice visibility) ──
   const needOnlyBlocks = useMemo(
@@ -112,8 +108,9 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
     return blocked;
   }, [niceToHave, needBaseSlots]);
 
-  // ── Step 4: Visible nices = not blocked, or forced visible ──
+  // ── Step 4: Visible nices = not deselected, and not blocked unless forced visible ──
   const visibleNice = niceToHave.filter((c) => {
+    if (deselectedIds.has(c.id)) return false;
     if (blockedNiceIds.has(c.id) && !forcedVisibleIds.has(c.id)) return false;
     return true;
   });
@@ -149,6 +146,7 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
 
   // ── Step 5: Full schedule with all visible courses ──
   const visibleOptional = optional.filter((c) => {
+    if (deselectedIds.has(c.id)) return false;
     if (blockedOptionalIds.has(c.id) && !forcedVisibleIds.has(c.id)) return false;
     return true;
   });
@@ -165,100 +163,53 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
   const showNice = stage === 'nice' || stage === 'optional';
   const showOptional = stage === 'optional';
 
-  // Effective hidden check
+  // The editable sidebar only shows the tier being decided on THIS page —
+  // earlier tiers were already locked in on their own page (you can't reach
+  // a later stage while an earlier tier still has an unresolved conflict).
+  const editNeed = stage === 'need';
+  const editNice = stage === 'nice';
+  const editOptional = stage === 'optional';
+
+  // Effective hidden check — deselected, or structurally blocked and not peeked at
   const isHidden = (courseId: string) => {
+    if (deselectedIds.has(courseId)) return true;
     if (blockedNiceIds.has(courseId) && !forcedVisibleIds.has(courseId)) return true;
     if (blockedOptionalIds.has(courseId) && !forcedVisibleIds.has(courseId)) return true;
     return false;
   };
 
-  const tierOf = (courseId: string): Tier | null => {
-    if (needToHave.some((c) => c.id === courseId)) return 'need';
-    if (niceToHave.some((c) => c.id === courseId)) return 'nice';
-    if (optional.some((c) => c.id === courseId)) return 'optional';
-    return null;
-  };
-
-  // Apply a batch of removals (sacrifice) and additions (put back) against
-  // the tier arrays in one pass per tier, so combined operations (like a
-  // swap) never clobber each other via stale-closure double setState calls.
-  const updateTiers = (removeIds: Set<string>, addCourses: Course[]) => {
-    const addByTier: Record<Tier, Course[]> = { need: [], nice: [], optional: [] };
-    for (const c of addCourses) {
-      const t = sacrificedFrom[c.id];
-      if (t) addByTier[t].push(c);
-    }
-    setNeedToHave([...needToHave.filter((c) => !removeIds.has(c.id)), ...addByTier.need]);
-    setNiceToHave([...niceToHave.filter((c) => !removeIds.has(c.id)), ...addByTier.nice]);
-    setOptional([...optional.filter((c) => !removeIds.has(c.id)), ...addByTier.optional]);
-  };
-
-  // Sacrifice one or more courses at once, so they show up as "not
-  // categorized" back in Prioritize, and remember where each came from.
-  const sacrificeCourses = (courseIds: string[]) => {
-    const nextSacrificed = { ...sacrificedFrom };
-    for (const id of courseIds) {
-      const tier = tierOf(id);
-      if (tier) nextSacrificed[id] = tier;
-    }
-    setSacrificedFrom(nextSacrificed);
-    updateTiers(new Set(courseIds), []);
-
-    // Clear section overrides for sibling problem-group courses
-    for (const ref of [overlapIdsRef, niceOverlapIdsRef, optOverlapIdsRef]) {
-      for (const courseId of courseIds) {
-        if (ref.current.has(courseId)) {
-          for (const id of ref.current) {
-            if (!courseIds.includes(id)) removeSectionOverride(id);
-          }
-        }
-      }
-    }
-  };
-
-  // Put a sacrificed course back into the tier it came from.
-  const putBackCourse = (courseId: string) => {
-    const course = addedCourses.find((c) => c.id === courseId);
-    if (!sacrificedFrom[courseId] || !course) return;
-
-    updateTiers(new Set(), [course]);
-    const next = { ...sacrificedFrom };
-    delete next[courseId];
-    setSacrificedFrom(next);
-  };
-
-  // Bring a sacrificed course back by sacrificing a different one in its
-  // place, clearing overrides on the courses that stay so they re-optimize.
-  const swapSacrifice = (bringBackId: string, sacrificeIds: string[], currentVisible: Course[]) => {
-    for (const c of currentVisible) {
-      if (!sacrificeIds.includes(c.id)) removeSectionOverride(c.id);
-    }
-    const bringBackCourse = addedCourses.find((c) => c.id === bringBackId);
-    if (!bringBackCourse) return;
-
-    const nextSacrificed = { ...sacrificedFrom };
-    for (const id of sacrificeIds) {
-      const tier = tierOf(id);
-      if (tier) nextSacrificed[id] = tier;
-    }
-    delete nextSacrificed[bringBackId];
-    setSacrificedFrom(nextSacrificed);
-    updateTiers(new Set(sacrificeIds), [bringBackCourse]);
-  };
-
-  // Toggle handler
+  // Toggle a course on/off for scheduling. Deselecting never removes it from
+  // its tier's bucket — it stays listed (unticked) right where it was. If
+  // re-ticking it causes a conflict, the tier's own "can't all fit" warning
+  // reappears with its usual uncheck suggestions — no separate trade-off flow.
   const toggleCourse = (courseId: string) => {
     if (blockedNiceIds.has(courseId) || blockedOptionalIds.has(courseId)) {
-      // Blocked course: toggle forced visibility
+      // Structurally blocked course: toggle forced visibility to peek at the overlap
       setForcedVisibleIds((prev) => {
         const next = new Set(prev);
         if (next.has(courseId)) next.delete(courseId);
         else next.add(courseId);
         return next;
       });
-    } else {
-      sacrificeCourses([courseId]);
+      return;
     }
+    setDeselectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(courseId)) {
+        next.delete(courseId);
+      } else {
+        next.add(courseId);
+        // Clear section overrides for sibling problem-group courses so they re-optimize
+        for (const ref of [overlapIdsRef, niceOverlapIdsRef, optOverlapIdsRef]) {
+          if (ref.current.has(courseId)) {
+            for (const id of ref.current) {
+              if (id !== courseId) removeSectionOverride(id);
+            }
+          }
+        }
+      }
+      return next;
+    });
   };
 
   // Build a set of need-to-have course IDs for quick lookup
@@ -286,28 +237,6 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
     }
     solve(0, [...base], 0);
     return best;
-  }
-
-  // If `course` (currently sacrificed) were put back, does it fit cleanly,
-  // or does it take sacrificing one (or two) currently-visible courses instead?
-  // Returns every valid combination at the smallest size that works.
-  function computeSwapPreview(course: Course, currentVisible: Course[], base: Slot[]) {
-    const trial = [...currentVisible, course];
-    const maxFit = computeMaxFit(trial, base);
-    if (maxFit === trial.length) {
-      return { needsSacrifice: false, sacrificeOptions: [] as Course[][] };
-    }
-    const droppable = currentVisible.filter((c) => !c.isObligatory);
-    for (const size of [1, 2]) {
-      const options = combinations(droppable, size).filter((combo) => {
-        const remaining = trial.filter((c) => !combo.some((x) => x.id === c.id));
-        return computeMaxFit(remaining, base) === remaining.length;
-      });
-      if (options.length > 0) {
-        return { needsSacrifice: true, sacrificeOptions: options };
-      }
-    }
-    return { needsSacrifice: true, sacrificeOptions: [] as Course[][] };
   }
 
   function analyzeConflicts(courses: Course[], base: Slot[]) {
@@ -453,15 +382,19 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
 
   optOverlapIdsRef.current = optOverlapIds;
 
-  // Accept a "drop these courses" choice: sacrifice them together and let the
-  // rest of the conflict group re-optimize freely instead of staying pinned
-  // to old overrides.
+  // Accept a "drop these courses" choice: deselect them together (they stay
+  // listed, just unticked) and let the rest of the conflict group re-optimize
+  // freely instead of staying pinned to old overrides.
   const acceptDropOption = (dropCourses: Course[], groupIds: string[]) => {
     const dropIds = new Set(dropCourses.map((c) => c.id));
     for (const id of groupIds) {
       if (!dropIds.has(id)) removeSectionOverride(id);
     }
-    sacrificeCourses(dropCourses.map((c) => c.id));
+    setDeselectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of dropIds) next.add(id);
+      return next;
+    });
   };
 
   // Total units from placed (non-conflicting) courses in tiers up through this stage
@@ -473,23 +406,6 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
     const course = [...needToHave, ...niceToHave, ...optional].find((c) => c.id === id);
     return sum + (course?.units ?? 0);
   }, 0);
-
-  // Courses sacrificed from this screen, with a preview of what putting
-  // each one back would cost (nothing, or exactly one other course).
-  // Only surface sacrifices for tiers already unlocked at this stage.
-  const stageAllowsTier = (tier: 'need' | 'nice' | 'optional') =>
-    tier === 'need' || (tier === 'nice' && showNice) || (tier === 'optional' && showOptional);
-
-  const sacrificedCourses = Object.entries(sacrificedFrom)
-    .filter(([, tier]) => stageAllowsTier(tier))
-    .map(([id, tier]) => {
-      const course = addedCourses.find((c) => c.id === id);
-      if (!course) return null;
-      const currentVisible = tier === 'need' ? visibleNeed : tier === 'nice' ? visibleNice : visibleOptional;
-      const base = tier === 'need' ? obligatorySlots : tier === 'nice' ? needBaseSlots : needNiceBaseSlots;
-      return { course, tier, currentVisible, preview: computeSwapPreview(course, currentVisible, base) };
-    })
-    .filter((x): x is NonNullable<typeof x> => x !== null);
 
   if (needToHave.length === 0) {
     return (
@@ -505,6 +421,16 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
 
   return (
     <div className="screen schedule-screen">
+      {stage === 'nice' && (
+        <p className="schedule-stage-note">
+          Only Nice-to-Haves that fit around your Need-to-Have schedule are added here — the rest stay listed below, greyed out, until there's room.
+        </p>
+      )}
+      {stage === 'optional' && (
+        <p className="schedule-stage-note">
+          Only Optionals that fit around your Need-to-Have and Nice-to-Have schedule are added to the calendar below.
+        </p>
+      )}
       <div className="schedule-layout">
         {/* Calendar Grid */}
         <div className="calendar-wrap">
@@ -687,49 +613,6 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
               Resolve the scheduling conflicts above before continuing.
             </div>
           )}
-
-          {sacrificedCourses.length > 0 && (
-            <div className="bid-sidebar sacrifice-panel">
-              <div className="bid-header">
-                <h2 className="bid-title">You Had to Sacrifice</h2>
-              </div>
-              {sacrificedCourses.map(({ course, currentVisible, preview }) => (
-                <div key={course.id} className="sacrifice-row">
-                  <div className="bid-row-info">
-                    <span className="bid-row-number">{course.number}</span>
-                    <span className="bid-row-title">{course.title}</span>
-                    <span className={`term-badge term-badge-sm term-${course.term.toLowerCase()}`}>{course.term}</span>
-                  </div>
-
-                  {!preview.needsSacrifice && (
-                    <button className="sacrifice-action-btn" onClick={() => putBackCourse(course.id)}>
-                      Put it back
-                    </button>
-                  )}
-
-                  {preview.needsSacrifice && preview.sacrificeOptions.length > 0 && (
-                    <>
-                      {preview.sacrificeOptions.map((combo, i) => (
-                        <button
-                          key={i}
-                          className="sacrifice-action-btn"
-                          onClick={() => swapSacrifice(course.id, combo.map((c) => c.id), currentVisible)}
-                        >
-                          Put {course.title} back, sacrifice {combo.map((c) => c.title).join(' and ')} instead
-                        </button>
-                      ))}
-                    </>
-                  )}
-
-                  {preview.needsSacrifice && preview.sacrificeOptions.length === 0 && (
-                    <p className="sacrifice-hint">
-                      Won't fit back in without freeing up more than two courses.
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* Section Toggle Sidebar */}
@@ -743,7 +626,7 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
               <h2 className="bid-title">Sections</h2>
             </div>
 
-            {needToHave.length > 0 && (
+            {editNeed && needToHave.length > 0 && (
               <div className="bid-section">
                 <div className="bid-section-label need">Need-to-Have</div>
                 {needToHave.map((c) => (
@@ -760,7 +643,7 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
               </div>
             )}
 
-            {conflictMessage && (
+            {editNeed && conflictMessage && (
               <div className="sidebar-hint">
                 <p>{conflictMessage}</p>
                 {conflictDropOptions.map((combo, i) => (
@@ -775,7 +658,7 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
               </div>
             )}
 
-            {showNice && niceToHave.length > 0 && (
+            {editNice && niceToHave.length > 0 && (
               <div className="bid-section">
                 <div className="bid-section-label nice">Nice-to-Have</div>
                 {niceToHave.map((c) => (
@@ -792,7 +675,7 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
               </div>
             )}
 
-            {showNice && niceConflictMessage && (
+            {editNice && niceConflictMessage && (
               <div className="sidebar-hint">
                 <p>{niceConflictMessage}</p>
                 {niceConflictDropOptions.map((combo, i) => (
@@ -807,24 +690,24 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
               </div>
             )}
 
-            {showOptional && optional.length > 0 && (
+            {editOptional && optional.length > 0 && (
               <div className="bid-section">
                 <div className="bid-section-label optional">Optional</div>
                 {optional.map((c) => (
-                    <SectionToggle
-                      key={c.id}
-                      course={c}
-                      currentSectionId={getAssignedSection(placedBlocks, c.id)?.id || null}
-                      onToggle={() => toggleCourse(c.id)}
-                      hidden={isHidden(c.id)}
-                      tier="optional"
-                      overlapIds={optOverlapIds}
-                    />
+                  <SectionToggle
+                    key={c.id}
+                    course={c}
+                    currentSectionId={getAssignedSection(placedBlocks, c.id)?.id || null}
+                    onToggle={() => toggleCourse(c.id)}
+                    hidden={isHidden(c.id)}
+                    tier="optional"
+                    overlapIds={optOverlapIds}
+                  />
                 ))}
               </div>
             )}
 
-            {showOptional && optConflictMessage && (
+            {editOptional && optConflictMessage && (
               <div className="sidebar-hint">
                 <p>{optConflictMessage}</p>
                 {optConflictDropOptions.map((combo, i) => (
@@ -846,46 +729,3 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
   );
 }
 
-function SectionToggle({
-  course,
-  currentSectionId,
-  onToggle,
-  hidden,
-  tier,
-  overlapIds,
-}: {
-  course: Course;
-  currentSectionId: string | null;
-  onToggle: () => void;
-  hidden: boolean;
-  tier: 'need' | 'nice' | 'optional';
-  overlapIds: Set<string>;
-}) {
-  const isConflicting = overlapIds.has(course.id);
-  const assigned = course.sections.find((s) => s.id === currentSectionId) ?? course.sections[0];
-
-  return (
-    <div className={`bid-row bid-row-${tier} ${isConflicting ? 'bid-row-conflict' : ''} ${hidden ? 'bid-row-hidden' : ''}`}>
-      {course.isObligatory ? (
-        <span className="auto-status" title="Obligatory — cannot be removed">✓</span>
-      ) : (
-        <input
-          type="checkbox"
-          className="course-checkbox"
-          checked={!hidden}
-          onChange={onToggle}
-          title={hidden ? 'Show on schedule' : 'Hide from schedule'}
-        />
-      )}
-      <div className="bid-row-info">
-        {course.isObligatory && <span className="obligatory-badge-sm">SFMBA Obligatory</span>}
-        <span className="bid-row-number">{course.number}</span>
-        <span className="bid-row-title">{course.title}</span>
-        <span className={`term-badge term-badge-sm term-${course.term.toLowerCase()}`}>{course.term}</span>
-      </div>
-      <div className="section-toggle-group">
-        <span className="section-single">{assigned?.days} {assigned?.time}</span>
-      </div>
-    </div>
-  );
-}

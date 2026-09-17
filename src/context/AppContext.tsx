@@ -15,8 +15,8 @@ interface AppState {
   setNeedToHave: (courses: Course[]) => void;
   setNiceToHave: (courses: Course[]) => void;
   setOptional: (courses: Course[]) => void;
-  sacrificedFrom: Record<string, 'need' | 'nice' | 'optional'>;
-  setSacrificedFrom: (map: Record<string, 'need' | 'nice' | 'optional'>) => void;
+  deselectedIds: Set<string>;
+  setDeselectedIds: (ids: Set<string>) => void;
   isChatOpen: boolean;
   toggleChat: () => void;
   chatMessages: ChatMessage[];
@@ -48,7 +48,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [needToHave, setNeedToHave] = useState<Course[]>([OBLIGATORY_COURSE]);
   const [niceToHave, setNiceToHave] = useState<Course[]>([]);
   const [optional, setOptional] = useState<Course[]>([]);
-  const [sacrificedFrom, setSacrificedFrom] = useState<Record<string, 'need' | 'nice' | 'optional'>>({});
+  const [deselectedIds, setDeselectedIds] = useState<Set<string>>(new Set());
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(INITIAL_CHAT);
   const [sectionOverrides, setSectionOverrides] = useState<Record<string, string>>({});
@@ -82,6 +82,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return next;
     });
     setBrowseAddedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    setDeselectedIds((prev) => {
       const next = new Set(prev);
       next.delete(id);
       return next;
@@ -167,8 +172,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setNeedToHave,
         setNiceToHave,
         setOptional,
-        sacrificedFrom,
-        setSacrificedFrom,
+        deselectedIds,
+        setDeselectedIds,
         isChatOpen,
         toggleChat,
         chatMessages,

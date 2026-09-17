@@ -22,6 +22,7 @@ export function BiddingScreen() {
     optional,
     sectionOverrides,
     setScreen,
+    deselectedIds,
   } = useApp();
 
   // Replicate blockedNiceIds logic (same as BrowseScreen/ScheduleScreen)
@@ -29,7 +30,8 @@ export function BiddingScreen() {
     day: ob.day, start: ob.startHour, end: ob.endHour, term: null,
   }));
 
-  const visibleNeed = needToHave;
+  // Deselected courses stay in the tier but are excluded from the schedule.
+  const visibleNeed = needToHave.filter((c) => !deselectedIds.has(c.id));
 
   const needOnlyBlocks = useMemo(
     () => computeSchedule({ needToHave: visibleNeed, niceToHave: [], optional: [], sectionOverrides }),
@@ -58,11 +60,12 @@ export function BiddingScreen() {
     return blocked;
   }, [niceToHave, needBaseSlots]);
 
-  const visibleNice = niceToHave.filter((c) => !blockedNiceIds.has(c.id));
+  const visibleNice = niceToHave.filter((c) => !deselectedIds.has(c.id) && !blockedNiceIds.has(c.id));
+  const visibleOptional = optional.filter((c) => !deselectedIds.has(c.id));
 
   const placedBlocks = useMemo(
-    () => computeSchedule({ needToHave: visibleNeed, niceToHave: visibleNice, optional, sectionOverrides }),
-    [visibleNeed, visibleNice, optional, sectionOverrides]
+    () => computeSchedule({ needToHave: visibleNeed, niceToHave: visibleNice, optional: visibleOptional, sectionOverrides }),
+    [visibleNeed, visibleNice, visibleOptional, sectionOverrides]
   );
 
   // Get unique placed (non-conflicting) courses in tier order

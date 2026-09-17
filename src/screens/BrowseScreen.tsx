@@ -2,8 +2,9 @@ import { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import type { Course, Section, Term } from '../types';
 import { ALL_COURSES, STUDENT } from '../data/courses';
-import { computeSchedule, termsConflict } from '../utils/scheduleEngine';
+import { computeSchedule, termsConflict, getAssignedSection } from '../utils/scheduleEngine';
 import { StarRating } from '../components/StarRating';
+import { SectionToggle } from '../components/SectionToggle';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 const START_HOUR = 8.5;
@@ -57,18 +58,17 @@ export function BrowseScreen() {
     setSectionOverride,
     addedCourses,
     addCourse,
-    removeCourse,
     setScreen,
     browseAddedIds,
     addBrowseAddedId,
-    clearBrowseAddedIds,
+    deselectedIds,
+    setDeselectedIds,
   } = useApp();
 
   const [search, setSearch] = useState('');
   const [filterDay, setFilterDay] = useState<string>('');
   const [filterMinRating, setFilterMinRating] = useState<number>(0);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [savedConfirm, setSavedConfirm] = useState(false);
 
   // ── Replicate ScheduleScreen's blockedNiceIds logic ──
 
@@ -76,8 +76,9 @@ export function BrowseScreen() {
     day: ob.day, start: ob.startHour, end: ob.endHour, term: null,
   }));
 
-  // Step 1: Visible needs
-  const visibleNeed = needToHave;
+  // Step 1: Visible needs — deselected courses stay in the tier but are
+  // excluded from the schedule, matching the Schedule pages.
+  const visibleNeed = needToHave.filter((c) => !deselectedIds.has(c.id));
 
   // Step 2: Need-only schedule to get base slots
   const needOnlyBlocks = useMemo(
@@ -108,13 +109,17 @@ export function BrowseScreen() {
     return blocked;
   }, [niceToHave, needBaseSlots]);
 
-  // Step 4: Visible nices = not blocked
-  const visibleNice = niceToHave.filter((c) => !blockedNiceIds.has(c.id));
+  // Step 4: Visible nices = not deselected and not blocked
+  const visibleNice = niceToHave.filter((c) => !deselectedIds.has(c.id) && !blockedNiceIds.has(c.id));
+
+  // Step 4b: Visible optionals = not deselected (blocked-optional analysis
+  // isn't replicated here since Browse only adds courses that already fit)
+  const visibleOptional = optional.filter((c) => !deselectedIds.has(c.id));
 
   // Step 5: Full schedule with all visible courses
   const placedBlocks = useMemo(
-    () => computeSchedule({ needToHave: visibleNeed, niceToHave: visibleNice, optional, sectionOverrides }),
-    [visibleNeed, visibleNice, optional, sectionOverrides]
+    () => computeSchedule({ needToHave: visibleNeed, niceToHave: visibleNice, optional: visibleOptional, sectionOverrides }),
+    [visibleNeed, visibleNice, visibleOptional, sectionOverrides]
   );
 
   // Build occupied slots from ALL placed blocks (including conflicting ones)
@@ -175,23 +180,12 @@ export function BrowseScreen() {
     });
   }, [fittingCourses, search, filterDay, filterMinRating]);
 
-  // Get occupied slots excluding a specific course (for section-fit checks)
-  const getOccupiedExcluding = (courseId: string): Slot[] => {
-    const slots: Slot[] = STUDENT.obligatoryBlocks.map((ob) => ({
-      day: ob.day, start: ob.startHour, end: ob.endHour, term: null,
-    }));
-    for (const b of placedBlocks) {
-      if (!b.couldntFit && b.course.id !== courseId) {
-        slots.push({ day: b.day, start: b.section.startHour, end: b.section.endHour, term: null });
-      }
-    }
-    return slots;
-  };
-
   const handleAddAsOptional = (e: React.MouseEvent, course: Course) => {
     e.stopPropagation();
     addCourse(course);
-    // Pin to the first fitting section so it doesn't land on top of existing courses
+    // Pin to the fitting section at add time — it's what makes this course
+    // "compatible"; it can be turned off and back on, but not switched, or
+    // it could stop being compatible with the rest of the schedule.
     const fittingSection = course.sections.find((s) => sectionFits(s, course.term, occupiedSlots));
     if (fittingSection) {
       setSectionOverride(course.id, fittingSection.id);
@@ -200,12 +194,15 @@ export function BrowseScreen() {
     addBrowseAddedId(course.id);
   };
 
-  const handleRemoveBrowseAdded = (courseId: string) => {
-    removeCourse(courseId);
-  };
-
-  const handleSectionToggle = (courseId: string, sectionId: string) => {
-    setSectionOverride(courseId, sectionId);
+  // De-check / re-check a course added from Browse — same toggle as the
+  // Schedule pages: it stays listed, just excluded from the schedule when off.
+  const toggleBrowseAdded = (courseId: string) => {
+    setDeselectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(courseId)) next.delete(courseId);
+      else next.add(courseId);
+      return next;
+    });
   };
 
   // Browse-added courses still in tiers
@@ -323,61 +320,28 @@ export function BrowseScreen() {
           <span className="legend-item"><span className="legend-dot dot-obligatory" />Obligatory</span>
         </div>
 
-        {/* Added from Browse — section toggles + remove */}
+        {/* Added from Browse — same de-check/re-check toggle as the Schedule pages.
+            Section is fixed at add time and can't be switched, or the course
+            could stop being compatible with the rest of the schedule. */}
         {browseAddedCourses.length > 0 && (
-          <div className="browse-added-panel">
-            <h4 className="browse-added-heading">Added from Browse</h4>
-            {browseAddedCourses.map((course) => {
-              const slotsExcluding = getOccupiedExcluding(course.id);
-              const assignedSectionId = placedBlocks.find((b) => b.course.id === course.id)?.section.id;
-
-              return (
-                <div key={course.id} className="browse-added-row">
-                  <div className="browse-added-info">
-                    <span className="browse-added-number">{course.number}</span>
-                    <span className="browse-added-title">{course.title}</span>
-                  </div>
-                  {course.sections.length > 1 && (
-                    <div className="browse-added-sections">
-                      {course.sections.map((s) => {
-                        const fits = sectionFits(s, course.term, slotsExcluding);
-                        const isActive = s.id === assignedSectionId;
-                        return (
-                          <button
-                            key={s.id}
-                            className={`browse-section-chip ${isActive ? 'active' : ''} ${!fits ? 'conflict' : ''}`}
-                            onClick={() => handleSectionToggle(course.id, s.id)}
-                          >
-                            {s.days} · {s.time}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <button
-                    className="browse-added-remove"
-                    onClick={() => handleRemoveBrowseAdded(course.id)}
-                    title="Remove from schedule"
-                  >
-                    ✕
-                  </button>
-                </div>
-              );
-            })}
+          <div className="bid-sidebar browse-added-panel">
+            <div className="bid-header">
+              <h2 className="bid-title">Added from Browse</h2>
+            </div>
+            <div className="bid-section">
+              {browseAddedCourses.map((course) => (
+                <SectionToggle
+                  key={course.id}
+                  course={course}
+                  currentSectionId={getAssignedSection(placedBlocks, course.id)?.id || sectionOverrides[course.id] || null}
+                  onToggle={() => toggleBrowseAdded(course.id)}
+                  hidden={deselectedIds.has(course.id)}
+                  tier="optional"
+                  overlapIds={new Set()}
+                />
+              ))}
+            </div>
           </div>
-        )}
-
-        {browseAddedCourses.length > 0 && !savedConfirm && (
-          <button
-            className="save-schedule-btn browse-save-optional"
-            onClick={() => { clearBrowseAddedIds(); setSavedConfirm(true); setTimeout(() => setSavedConfirm(false), 3000); }}
-          >
-            I'm happy with this — save as optional
-          </button>
-        )}
-
-        {savedConfirm && (
-          <div className="browse-saved-toast">Saved as optional ✓</div>
         )}
 
         <button className="save-schedule-btn browse-go-bidding" onClick={() => setScreen('bidding')}>

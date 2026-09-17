@@ -56,6 +56,10 @@ export function LoginScreen() {
         <div className="orb orb-2" />
         <div className="orb orb-3" />
       </div>
+
+      <p className="login-disclosure">
+        Disclosure: this is a demo, not an official Sloan tool. Ratings and reviews shown are made up for illustration and shouldn't be treated as real course information.
+      </p>
     </div>
   );
 }
