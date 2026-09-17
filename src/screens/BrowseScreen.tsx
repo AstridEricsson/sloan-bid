@@ -122,15 +122,17 @@ export function BrowseScreen() {
     [visibleNeed, visibleNice, visibleOptional, sectionOverrides]
   );
 
-  // Build occupied slots from ALL placed blocks (including conflicting ones)
-  // Use term: null so ANY time overlap is blocked — no visual overlaps on calendar
+  // Build occupied slots from ALL placed blocks (including conflicting ones).
+  // Keep each block's real term so H3/Full/H4 conflicts are judged the same
+  // way as everywhere else — an H3 and an H4 course in the same time slot
+  // are compatible (different halves of the semester), not a conflict.
   const occupiedSlots: Slot[] = useMemo(() => {
     const slots: Slot[] = STUDENT.obligatoryBlocks.map((ob) => ({
       day: ob.day, start: ob.startHour, end: ob.endHour, term: null,
     }));
     for (const b of placedBlocks) {
       if (!b.couldntFit) {
-        slots.push({ day: b.day, start: b.section.startHour, end: b.section.endHour, term: null });
+        slots.push({ day: b.day, start: b.section.startHour, end: b.section.endHour, term: b.course.term });
       }
     }
     return slots;
@@ -217,18 +219,13 @@ export function BrowseScreen() {
 
   return (
     <div className="screen browse-screen">
-      {/* Static Calendar */}
-      <div className="browse-calendar">
-        <div className="browse-calendar-header">
-          <button className="browse-back-link" onClick={() => setScreen('schedule-optional')}>
-            ← Back to Schedule
-          </button>
-          <div className="units-counter">
-            <span className="units-number">{totalUnits}</span>
-            <span className="units-label">units</span>
-          </div>
-        </div>
+      <button className="browse-back-link" onClick={() => setScreen('schedule-optional')}>
+        ← Back to Schedule
+      </button>
 
+      {/* Schedule — same layout and size as the Schedule pages */}
+      <div className="schedule-layout">
+        <div className="calendar-wrap">
         <div className="calendar-grid">
           {/* Time column */}
           <div className="time-col">
@@ -249,6 +246,32 @@ export function BrowseScreen() {
           {DAYS.map((day) => {
             const dayBlocks = placedBlocks.filter((b) => b.day === day && !b.couldntFit);
             const oblBlock = STUDENT.obligatoryBlocks.find((ob) => ob.day === day);
+
+            // Split blocks that overlap in time but coexist (different halves
+            // of the semester) side by side instead of stacking them.
+            const overlapLayout = new Map<string, { col: number; total: number }>();
+            const assigned = new Set<number>();
+            for (let i = 0; i < dayBlocks.length; i++) {
+              if (assigned.has(i)) continue;
+              const group = [i];
+              assigned.add(i);
+              for (let j = i + 1; j < dayBlocks.length; j++) {
+                if (assigned.has(j)) continue;
+                const overlaps = group.some((gi) =>
+                  dayBlocks[gi].section.startHour < dayBlocks[j].section.endHour &&
+                  dayBlocks[gi].section.endHour > dayBlocks[j].section.startHour
+                );
+                if (overlaps) {
+                  group.push(j);
+                  assigned.add(j);
+                }
+              }
+              if (group.length > 1) {
+                group.forEach((gi, col) => {
+                  overlapLayout.set(dayBlocks[gi].course.id, { col, total: group.length });
+                });
+              }
+            }
 
             return (
               <div key={day} className="day-col">
@@ -290,14 +313,22 @@ export function BrowseScreen() {
                       ? 'cal-block-nice'
                       : 'cal-block-optional';
 
+                    const layout = overlapLayout.get(block.course.id);
+                    const blockStyle: React.CSSProperties = {
+                      top: `${hourToPercent(block.section.startHour)}%`,
+                      height: `${durationToPercent(block.section.startHour, block.section.endHour)}%`,
+                      ...(layout && {
+                        left: `calc(3px + ${layout.col} * (100% - 6px) / ${layout.total})`,
+                        width: `calc((100% - 6px) / ${layout.total})`,
+                        right: 'auto',
+                      }),
+                    };
+
                     return (
                       <div
                         key={`${block.course.id}-${idx}`}
                         className={`cal-block ${cls} ${block.course.isObligatory && !block.conflict ? 'cal-block-obligatory' : ''}`}
-                        style={{
-                          top: `${hourToPercent(block.section.startHour)}%`,
-                          height: `${durationToPercent(block.section.startHour, block.section.endHour)}%`,
-                        }}
+                        style={blockStyle}
                         title={block.course.title}
                       >
                         {block.course.isObligatory && <span className="block-obligatory-badge">SFMBA Obligatory</span>}
@@ -320,36 +351,44 @@ export function BrowseScreen() {
           <span className="legend-item"><span className="legend-dot dot-obligatory" />Obligatory</span>
         </div>
 
-        {/* Added from Browse — same de-check/re-check toggle as the Schedule pages.
-            Section is fixed at add time and can't be switched, or the course
-            could stop being compatible with the rest of the schedule. */}
-        {browseAddedCourses.length > 0 && (
-          <div className="bid-sidebar browse-added-panel">
-            <div className="bid-header">
-              <h2 className="bid-title">Added from Browse</h2>
-            </div>
-            <div className="bid-section">
-              {browseAddedCourses.map((course) => (
-                <SectionToggle
-                  key={course.id}
-                  course={course}
-                  currentSectionId={getAssignedSection(placedBlocks, course.id)?.id || sectionOverrides[course.id] || null}
-                  onToggle={() => toggleBrowseAdded(course.id)}
-                  hidden={deselectedIds.has(course.id)}
-                  tier="optional"
-                  overlapIds={new Set()}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
         <button className="save-schedule-btn browse-go-bidding" onClick={() => setScreen('bidding')}>
           I'm happy with this — go to bidding ➜
         </button>
+        </div>
+
+        <div className="sidebar-col">
+          <div className="units-counter">
+            <span className="units-number">{totalUnits}</span>
+            <span className="units-label">units</span>
+          </div>
+
+          {/* Added from Browse — same de-check/re-check toggle as the Schedule pages.
+              Section is fixed at add time and can't be switched, or the course
+              could stop being compatible with the rest of the schedule. */}
+          {browseAddedCourses.length > 0 && (
+            <div className="bid-sidebar">
+              <div className="bid-header">
+                <h2 className="bid-title">Added from Browse</h2>
+              </div>
+              <div className="bid-section">
+                {browseAddedCourses.map((course) => (
+                  <SectionToggle
+                    key={course.id}
+                    course={course}
+                    currentSectionId={getAssignedSection(placedBlocks, course.id)?.id || sectionOverrides[course.id] || null}
+                    onToggle={() => toggleBrowseAdded(course.id)}
+                    hidden={deselectedIds.has(course.id)}
+                    tier="optional"
+                    overlapIds={new Set()}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Browse Courses Panel */}
+      {/* Browse Courses Panel — full width, below the schedule */}
       <div className="browse-courses">
         <h2 className="browse-heading">Browse compatible</h2>
         <p className="browse-subtitle">{filtered.length} course{filtered.length !== 1 ? 's' : ''} available</p>
@@ -406,7 +445,7 @@ export function BrowseScreen() {
         </div>
 
         {/* Course List */}
-        <div className="browse-course-grid">
+        <div className="course-grid">
           {filtered.map((course) => (
             <div
               key={course.id}

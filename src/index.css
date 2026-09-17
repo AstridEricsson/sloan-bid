@@ -1464,21 +1464,8 @@ input, textarea { font-family: inherit; }
 /* ── Browse Screen ── */
 .browse-screen {
   display: flex;
-  gap: 28px;
-  height: 100%;
-  align-items: flex-start;
-}
-
-.browse-calendar {
-  flex: 0 0 55%;
-  min-width: 0;
-}
-
-.browse-calendar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .browse-back-link {
@@ -1500,10 +1487,6 @@ input, textarea { font-family: inherit; }
 }
 
 .browse-courses {
-  flex: 1;
-  min-width: 0;
-  overflow-y: auto;
-  max-height: calc(100vh - 80px);
   padding-bottom: 40px;
 }
 
@@ -1531,12 +1514,6 @@ input, textarea { font-family: inherit; }
 .browse-filter-bar .search-input-wrap {
   flex: 1;
   min-width: 140px;
-}
-
-.browse-course-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
 
 .browse-section-fit {
@@ -1709,6 +1686,13 @@ input, textarea { font-family: inherit; }
 .bid-section-label.need { color: var(--navy); }
 .bid-section-label.nice { color: var(--ice-dim); }
 .bid-section-label.optional { color: var(--gray-400); }
+.bid-section-label.not-compatible { color: var(--gray-400); }
+
+.not-compatible-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--gray-200);
+}
 
 .bid-row {
   display: flex;
@@ -1724,6 +1708,11 @@ input, textarea { font-family: inherit; }
 .bid-row-nice { border-left: 3px solid var(--ice-dim); }
 .bid-row-optional { border-left: 3px solid #818cf8; }
 .bid-row-hidden { opacity: 0.45; }
+.bid-row-not-compatible {
+  border-left: 3px solid var(--gray-200);
+  opacity: 0.55;
+  cursor: default;
+}
 
 .course-checkbox {
   width: 15px;

@@ -55,8 +55,6 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
   } = useApp();
   const [showConflictToast, setShowConflictToast] = useState(false);
 
-  // Blocked Nice-to-Haves the user explicitly re-checked to see overlaps
-  const [forcedVisibleIds, setForcedVisibleIds] = useState<Set<string>>(new Set());
   const overlapIdsRef = useRef<Set<string>>(new Set());
   const niceOverlapIdsRef = useRef<Set<string>>(new Set());
   const optOverlapIdsRef = useRef<Set<string>>(new Set());
@@ -108,12 +106,8 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
     return blocked;
   }, [niceToHave, needBaseSlots]);
 
-  // ── Step 4: Visible nices = not deselected, and not blocked unless forced visible ──
-  const visibleNice = niceToHave.filter((c) => {
-    if (deselectedIds.has(c.id)) return false;
-    if (blockedNiceIds.has(c.id) && !forcedVisibleIds.has(c.id)) return false;
-    return true;
-  });
+  // ── Step 4: Visible nices = not deselected, and not structurally blocked ──
+  const visibleNice = niceToHave.filter((c) => !deselectedIds.has(c.id) && !blockedNiceIds.has(c.id));
 
   // ── Step 4b: Compute need+nice base slots for optional analysis ──
   const needNiceBlocks = useMemo(
@@ -145,11 +139,7 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
   }, [optional, needNiceBaseSlots]);
 
   // ── Step 5: Full schedule with all visible courses ──
-  const visibleOptional = optional.filter((c) => {
-    if (deselectedIds.has(c.id)) return false;
-    if (blockedOptionalIds.has(c.id) && !forcedVisibleIds.has(c.id)) return false;
-    return true;
-  });
+  const visibleOptional = optional.filter((c) => !deselectedIds.has(c.id) && !blockedOptionalIds.has(c.id));
 
   const placedBlocks = useMemo(
     () => computeSchedule({ needToHave: visibleNeed, niceToHave: visibleNice, optional: visibleOptional, sectionOverrides }),
@@ -170,29 +160,15 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
   const editNice = stage === 'nice';
   const editOptional = stage === 'optional';
 
-  // Effective hidden check — deselected, or structurally blocked and not peeked at
-  const isHidden = (courseId: string) => {
-    if (deselectedIds.has(courseId)) return true;
-    if (blockedNiceIds.has(courseId) && !forcedVisibleIds.has(courseId)) return true;
-    if (blockedOptionalIds.has(courseId) && !forcedVisibleIds.has(courseId)) return true;
-    return false;
-  };
+  // Effective hidden check — only ever called for the compatible list, so
+  // it's just the manual deselect state.
+  const isHidden = (courseId: string) => deselectedIds.has(courseId);
 
   // Toggle a course on/off for scheduling. Deselecting never removes it from
   // its tier's bucket — it stays listed (unticked) right where it was. If
   // re-ticking it causes a conflict, the tier's own "can't all fit" warning
   // reappears with its usual uncheck suggestions — no separate trade-off flow.
   const toggleCourse = (courseId: string) => {
-    if (blockedNiceIds.has(courseId) || blockedOptionalIds.has(courseId)) {
-      // Structurally blocked course: toggle forced visibility to peek at the overlap
-      setForcedVisibleIds((prev) => {
-        const next = new Set(prev);
-        if (next.has(courseId)) next.delete(courseId);
-        else next.add(courseId);
-        return next;
-      });
-      return;
-    }
     setDeselectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(courseId)) {
@@ -214,6 +190,14 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
 
   // Build a set of need-to-have course IDs for quick lookup
   const needIds = new Set(needToHave.map((c) => c.id));
+
+  // Split each tier into what can actually be checked on/off vs. what
+  // structurally cannot fit no matter what — the latter is shown separately,
+  // read-only, so it doesn't get mixed in with the real choices.
+  const compatibleNice = niceToHave.filter((c) => !blockedNiceIds.has(c.id));
+  const incompatibleNice = niceToHave.filter((c) => blockedNiceIds.has(c.id));
+  const compatibleOptional = optional.filter((c) => !blockedOptionalIds.has(c.id));
+  const incompatibleOptional = optional.filter((c) => blockedOptionalIds.has(c.id));
 
   function computeMaxFit(courses: Course[], base: Slot[]): number {
     let best = 0;
@@ -658,10 +642,10 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
               </div>
             )}
 
-            {editNice && niceToHave.length > 0 && (
+            {editNice && compatibleNice.length > 0 && (
               <div className="bid-section">
                 <div className="bid-section-label nice">Nice-to-Have</div>
-                {niceToHave.map((c) => (
+                {compatibleNice.map((c) => (
                   <SectionToggle
                     key={c.id}
                     course={c}
@@ -671,6 +655,24 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
                     tier="nice"
                     overlapIds={niceOverlapIds}
                   />
+                ))}
+              </div>
+            )}
+
+            {editNice && incompatibleNice.length > 0 && (
+              <div className="bid-section not-compatible-section">
+                <div className="bid-section-label not-compatible">Not Compatible</div>
+                {incompatibleNice.map((c) => (
+                  <div key={c.id} className="bid-row bid-row-not-compatible">
+                    <div className="bid-row-info">
+                      <span className="bid-row-number">{c.number}</span>
+                      <span className="bid-row-title">{c.title}</span>
+                      <span className={`term-badge term-badge-sm term-${c.term.toLowerCase()}`}>{c.term}</span>
+                    </div>
+                    <div className="section-toggle-group">
+                      <span className="section-single">{c.sections[0]?.days} {c.sections[0]?.time}</span>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
@@ -690,10 +692,10 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
               </div>
             )}
 
-            {editOptional && optional.length > 0 && (
+            {editOptional && compatibleOptional.length > 0 && (
               <div className="bid-section">
                 <div className="bid-section-label optional">Optional</div>
-                {optional.map((c) => (
+                {compatibleOptional.map((c) => (
                   <SectionToggle
                     key={c.id}
                     course={c}
@@ -703,6 +705,24 @@ export function ScheduleScreen({ stage }: { stage: ScheduleStage }) {
                     tier="optional"
                     overlapIds={optOverlapIds}
                   />
+                ))}
+              </div>
+            )}
+
+            {editOptional && incompatibleOptional.length > 0 && (
+              <div className="bid-section not-compatible-section">
+                <div className="bid-section-label not-compatible">Not Compatible</div>
+                {incompatibleOptional.map((c) => (
+                  <div key={c.id} className="bid-row bid-row-not-compatible">
+                    <div className="bid-row-info">
+                      <span className="bid-row-number">{c.number}</span>
+                      <span className="bid-row-title">{c.title}</span>
+                      <span className={`term-badge term-badge-sm term-${c.term.toLowerCase()}`}>{c.term}</span>
+                    </div>
+                    <div className="section-toggle-group">
+                      <span className="section-single">{c.sections[0]?.days} {c.sections[0]?.time}</span>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
